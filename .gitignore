@@ -1,0 +1,12 @@
+#бинари
+/bin/
+
+# Логи
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# ОС
+.DS_Store

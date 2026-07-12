@@ -1,0 +1,38 @@
+# Поднимается одной командой docker compose up -d или make up
+services:
+  postgres:
+    image: postgres:16
+    container_name: messenger-postgres
+    environment:
+      POSTGRES_USER: messenger
+      POSTGRES_PASSWORD: messenger
+      POSTGRES_DB: messenger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready возвращает 0, когда сервер готов принимать подключения
+      test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: messenger-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    # --appendonly yes включает AOF-персистентность, чтобы Redis Streams переживали перезапуск
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
