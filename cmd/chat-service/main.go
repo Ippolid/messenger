@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Ippolid/messenger/internal/chat"
 	grpcserver "github.com/Ippolid/messenger/internal/transport/grpc"
 
 	"github.com/Ippolid/messenger/internal/auth"
@@ -39,7 +40,11 @@ func run() error {
 
 	tokens := auth.NewTokenManager(jwtSecret, auth.AccessTTL)
 	authSvc := auth.NewService(store, tokens)
-	srv := grpcserver.New(authSvc, tokens)
+
+	hub := chat.NewHub()
+	chatSvc := chat.NewService(store, hub)
+
+	srv := grpcserver.New(authSvc, chatSvc, tokens)
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {

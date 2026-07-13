@@ -9,6 +9,7 @@ import (
 
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 	"github.com/Ippolid/messenger/internal/auth"
+	"github.com/Ippolid/messenger/internal/chat"
 )
 
 // Server реализует chatv1.ChatServiceServer.
@@ -16,11 +17,12 @@ import (
 type Server struct {
 	chatv1.UnimplementedChatServiceServer
 	authSvc *auth.Service
+	chatSvc *chat.Service
 }
 
 // NewServer собирает gRPC-сервер поверх доменных сервисов.
-func NewServer(authSvc *auth.Service) *Server {
-	return &Server{authSvc: authSvc}
+func NewServer(authSvc *auth.Service, chatSvc *chat.Service) *Server {
+	return &Server{authSvc: authSvc, chatSvc: chatSvc}
 }
 
 // Register регистрирует нового пользователя.
