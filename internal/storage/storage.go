@@ -12,6 +12,7 @@ import (
 type Storage struct {
 	pool  *pgxpool.Pool
 	Users *UserRepo
+	Chats *ChatRepo
 }
 
 // New открывает пул подключений по DSN и проверяет доступность БД
@@ -27,6 +28,7 @@ func New(ctx context.Context, dsn string) (*Storage, error) {
 	return &Storage{
 		pool:  pool,
 		Users: &UserRepo{pool: pool},
+		Chats: &ChatRepo{pool: pool},
 	}, nil
 }
 

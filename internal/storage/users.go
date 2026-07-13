@@ -70,6 +70,20 @@ func (r *UserRepo) GetByLogin(ctx context.Context, login string) (User, error) {
 	return u, nil
 }
 
+// GetIDByLogin возвращает id пользователя по логину или ErrUserNotFound.
+func (r *UserRepo) GetIDByLogin(ctx context.Context, login string) (int64, error) {
+	const q = `SELECT id FROM users WHERE login = $1`
+	var id int64
+	err := r.pool.QueryRow(ctx, q, login).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrUserNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("select id by login: %w", err)
+	}
+	return id, nil
+}
+
 // SaveRefreshToken сохраняет хэш refresh-токена.
 func (r *UserRepo) SaveRefreshToken(ctx context.Context, t RefreshToken) error {
 	const q = `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`
