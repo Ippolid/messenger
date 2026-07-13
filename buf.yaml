@@ -1,0 +1,13 @@
+# Конфигурация buf.Модуль с proto лежит в api/proto.
+version: v2
+modules:
+  - path: api/proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # Subscribe стримит ServerEvent
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE
