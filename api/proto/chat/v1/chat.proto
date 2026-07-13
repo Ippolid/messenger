@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package chat.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/Ippolid/messenger/gen/chat/v1;chatv1";
+
+// ChatService-gRPC-сервис мессенджера
+// Все методы кроме Register/Login требуют JWT в metadata: "authorization: Bearer <jwt>"
+service ChatService {
+  // Аутентификация
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Чаты и участники
+  rpc CreateChat(CreateChatRequest) returns (CreateChatResponse);
+  rpc GetChats(GetChatsRequest) returns (GetChatsResponse);
+  rpc AddMember(AddMemberRequest) returns (AddMemberResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+
+  // Сообщения, история, поиск
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+
+  // Прочтение и typing-индикатор
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc SendTyping(SendTypingRequest) returns (SendTypingResponse);
+
+  // Realtime: сервер стримит события всех чатов пользователя
+  rpc Subscribe(SubscribeRequest) returns (stream ServerEvent);
+}
+
+// Auth
+
+message RegisterRequest {
+  string login = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  int64 user_id = 1;
+}
+
+message LoginRequest {
+  string login = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_jwt = 1;  // JWT на 15 минут
+  string refresh = 2;     // refresh-токен на 7 дней (в БД хранится хэш)
+}
+
+// Чаты
+
+// Тип чата
+enum ChatType {
+  CHAT_TYPE_UNSPECIFIED = 0;
+  CHAT_TYPE_DIRECT = 1;
+  CHAT_TYPE_GROUP = 2;
+}
+
+message CreateChatRequest {
+  ChatType type = 1;
+  string title = 2;                  // обязателен для group, пуст для direct
+  repeated string member_logins = 3; // прочие участники по логину (создатель добавляется автоматически)
+}
+
+message CreateChatResponse {
+  int64 chat_id = 1;
+}
+
+// Чат в списке пользователя вместе с последним сообщением и счётчиком непрочитанного.
+message ChatInfo {
+  int64 chat_id = 1;
+  ChatType type = 2;
+  string title = 3;
+  int64 last_message_id = 4;
+  string last_message_body = 5;
+  google.protobuf.Timestamp last_message_at = 6;
+  int64 unread_count = 7;
+}
+
+message GetChatsRequest {}
+
+message GetChatsResponse {
+  repeated ChatInfo chats = 1;
+}
+
+message AddMemberRequest {
+  int64 chat_id = 1;
+  string login = 2; // логин добавляемого пользователя
+  string role = 3;  // 'member' | 'reader' (admin назначается через отдельную логику)
+}
+
+message AddMemberResponse {}
+
+message RemoveMemberRequest {
+  int64 chat_id = 1;
+  string login = 2; // логин удаляемого пользователя
+}
+
+message RemoveMemberResponse {}
+
+// Сообщения
+
+message Message {
+  int64 id = 1;
+  int64 chat_id = 2;
+  int64 sender_id = 3;
+  string body = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message SendMessageRequest {
+  int64 chat_id = 1;
+  string body = 2;
+}
+
+message SendMessageResponse {
+  int64 message_id = 1;
+}
+
+message GetHistoryRequest {
+  int64 chat_id = 1;
+  int64 before_id = 2; // курсор: вернуть сообщения с id < before_id (0 = с конца)
+  int32 limit = 3;
+}
+
+message GetHistoryResponse {
+  repeated Message messages = 1;
+}
+
+message SearchRequest {
+  int64 chat_id = 1;
+  string query = 2;
+}
+
+message SearchResponse {
+  repeated Message messages = 1;
+}
+
+// Прочтение и typing
+
+message MarkReadRequest {
+  int64 chat_id = 1;
+  int64 message_id = 2;
+}
+
+message MarkReadResponse {}
+
+message SendTypingRequest {
+  int64 chat_id = 1;
+}
+
+message SendTypingResponse {}
+
+// Realtime
+
+message SubscribeRequest {}
+
+// Тип серверного события.
+enum ServerEventType {
+  SERVER_EVENT_TYPE_UNSPECIFIED = 0;
+  SERVER_EVENT_TYPE_MESSAGE_NEW = 1;
+  SERVER_EVENT_TYPE_MESSAGE_READ = 2;
+  SERVER_EVENT_TYPE_TYPING = 3;
+}
+
+// Событие «прочитано»: пользователь user_id сдвинул курсор до last_read_message_id.
+message MessageReadEvent {
+  int64 chat_id = 1;
+  int64 user_id = 2;
+  int64 last_read_message_id = 3;
+}
+
+// Эфемерное событие «печатает».
+message TypingEvent {
+  int64 chat_id = 1;
+  int64 user_id = 2;
+}
+
+// Событие сервера в стриме Subscribe. Полезная нагрузка зависит от type.
+message ServerEvent {
+  ServerEventType type = 1;
+  oneof payload {
+    Message message = 2;         // для MESSAGE_NEW
+    MessageReadEvent read = 3;   // для MESSAGE_READ
+    TypingEvent typing = 4;      // для TYPING
+  }
+}
