@@ -80,6 +80,8 @@ const (
 	ServerEventType_SERVER_EVENT_TYPE_MESSAGE_NEW  ServerEventType = 1
 	ServerEventType_SERVER_EVENT_TYPE_MESSAGE_READ ServerEventType = 2
 	ServerEventType_SERVER_EVENT_TYPE_TYPING       ServerEventType = 3
+	ServerEventType_SERVER_EVENT_TYPE_CHAT_CREATED ServerEventType = 4 // пользователя добавили в чат
+	ServerEventType_SERVER_EVENT_TYPE_CHAT_DELETED ServerEventType = 5 // чат удалён
 )
 
 // Enum value maps for ServerEventType.
@@ -89,12 +91,16 @@ var (
 		1: "SERVER_EVENT_TYPE_MESSAGE_NEW",
 		2: "SERVER_EVENT_TYPE_MESSAGE_READ",
 		3: "SERVER_EVENT_TYPE_TYPING",
+		4: "SERVER_EVENT_TYPE_CHAT_CREATED",
+		5: "SERVER_EVENT_TYPE_CHAT_DELETED",
 	}
 	ServerEventType_value = map[string]int32{
 		"SERVER_EVENT_TYPE_UNSPECIFIED":  0,
 		"SERVER_EVENT_TYPE_MESSAGE_NEW":  1,
 		"SERVER_EVENT_TYPE_MESSAGE_READ": 2,
 		"SERVER_EVENT_TYPE_TYPING":       3,
+		"SERVER_EVENT_TYPE_CHAT_CREATED": 4,
+		"SERVER_EVENT_TYPE_CHAT_DELETED": 5,
 	}
 )
 
@@ -793,6 +799,7 @@ type Message struct {
 	SenderId      int64                  `protobuf:"varint,3,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	Body          string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	SenderLogin   string                 `protobuf:"bytes,6,opt,name=sender_login,json=senderLogin,proto3" json:"sender_login,omitempty"` // логин отправителя (денормализовано для отображения)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -860,6 +867,13 @@ func (x *Message) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *Message) GetSenderLogin() string {
+	if x != nil {
+		return x.SenderLogin
+	}
+	return ""
 }
 
 type SendMessageRequest struct {
@@ -1476,6 +1490,51 @@ func (x *TypingEvent) GetUserId() int64 {
 	return 0
 }
 
+// Событие изменения списка чатов пользователя (создан/удалён).
+type ChatEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        int64                  `protobuf:"varint,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatEvent) Reset() {
+	*x = ChatEvent{}
+	mi := &file_chat_v1_chat_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatEvent) ProtoMessage() {}
+
+func (x *ChatEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatEvent.ProtoReflect.Descriptor instead.
+func (*ChatEvent) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ChatEvent) GetChatId() int64 {
+	if x != nil {
+		return x.ChatId
+	}
+	return 0
+}
+
 // Событие сервера в стриме Subscribe. Полезная нагрузка зависит от type.
 type ServerEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1485,6 +1544,7 @@ type ServerEvent struct {
 	//	*ServerEvent_Message
 	//	*ServerEvent_Read
 	//	*ServerEvent_Typing
+	//	*ServerEvent_Chat
 	Payload       isServerEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1492,7 +1552,7 @@ type ServerEvent struct {
 
 func (x *ServerEvent) Reset() {
 	*x = ServerEvent{}
-	mi := &file_chat_v1_chat_proto_msgTypes[27]
+	mi := &file_chat_v1_chat_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1564,7 @@ func (x *ServerEvent) String() string {
 func (*ServerEvent) ProtoMessage() {}
 
 func (x *ServerEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[27]
+	mi := &file_chat_v1_chat_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,7 +1577,7 @@ func (x *ServerEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerEvent.ProtoReflect.Descriptor instead.
 func (*ServerEvent) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{27}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ServerEvent) GetType() ServerEventType {
@@ -1561,6 +1621,15 @@ func (x *ServerEvent) GetTyping() *TypingEvent {
 	return nil
 }
 
+func (x *ServerEvent) GetChat() *ChatEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerEvent_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
 type isServerEvent_Payload interface {
 	isServerEvent_Payload()
 }
@@ -1577,11 +1646,17 @@ type ServerEvent_Typing struct {
 	Typing *TypingEvent `protobuf:"bytes,4,opt,name=typing,proto3,oneof"` // для TYPING
 }
 
+type ServerEvent_Chat struct {
+	Chat *ChatEvent `protobuf:"bytes,5,opt,name=chat,proto3,oneof"` // для CHAT_CREATED / CHAT_DELETED
+}
+
 func (*ServerEvent_Message) isServerEvent_Payload() {}
 
 func (*ServerEvent_Read) isServerEvent_Payload() {}
 
 func (*ServerEvent_Typing) isServerEvent_Payload() {}
+
+func (*ServerEvent_Chat) isServerEvent_Payload() {}
 
 var File_chat_v1_chat_proto protoreflect.FileDescriptor
 
@@ -1625,14 +1700,15 @@ const file_chat_v1_chat_proto_rawDesc = "" +
 	"\x13RemoveMemberRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\x03R\x06chatId\x12\x14\n" +
 	"\x05login\x18\x02 \x01(\tR\x05login\"\x16\n" +
-	"\x14RemoveMemberResponse\"\x9e\x01\n" +
+	"\x14RemoveMemberResponse\"\xc1\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\x03R\x06chatId\x12\x1b\n" +
 	"\tsender_id\x18\x03 \x01(\x03R\bsenderId\x12\x12\n" +
 	"\x04body\x18\x04 \x01(\tR\x04body\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"A\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
+	"\fsender_login\x18\x06 \x01(\tR\vsenderLogin\"A\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\x03R\x06chatId\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"4\n" +
@@ -1665,22 +1741,27 @@ const file_chat_v1_chat_proto_rawDesc = "" +
 	"\x14last_read_message_id\x18\x03 \x01(\x03R\x11lastReadMessageId\"?\n" +
 	"\vTypingEvent\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\x03R\x06chatId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\x03R\x06userId\"\xd5\x01\n" +
+	"\auser_id\x18\x02 \x01(\x03R\x06userId\"$\n" +
+	"\tChatEvent\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\x03R\x06chatId\"\xff\x01\n" +
 	"\vServerEvent\x12,\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x18.chat.v1.ServerEventTypeR\x04type\x12,\n" +
 	"\amessage\x18\x02 \x01(\v2\x10.chat.v1.MessageH\x00R\amessage\x12/\n" +
 	"\x04read\x18\x03 \x01(\v2\x19.chat.v1.MessageReadEventH\x00R\x04read\x12.\n" +
-	"\x06typing\x18\x04 \x01(\v2\x14.chat.v1.TypingEventH\x00R\x06typingB\t\n" +
+	"\x06typing\x18\x04 \x01(\v2\x14.chat.v1.TypingEventH\x00R\x06typing\x12(\n" +
+	"\x04chat\x18\x05 \x01(\v2\x12.chat.v1.ChatEventH\x00R\x04chatB\t\n" +
 	"\apayload*P\n" +
 	"\bChatType\x12\x19\n" +
 	"\x15CHAT_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10CHAT_TYPE_DIRECT\x10\x01\x12\x13\n" +
-	"\x0fCHAT_TYPE_GROUP\x10\x02*\x99\x01\n" +
+	"\x0fCHAT_TYPE_GROUP\x10\x02*\xe1\x01\n" +
 	"\x0fServerEventType\x12!\n" +
 	"\x1dSERVER_EVENT_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dSERVER_EVENT_TYPE_MESSAGE_NEW\x10\x01\x12\"\n" +
 	"\x1eSERVER_EVENT_TYPE_MESSAGE_READ\x10\x02\x12\x1c\n" +
-	"\x18SERVER_EVENT_TYPE_TYPING\x10\x032\xb3\x06\n" +
+	"\x18SERVER_EVENT_TYPE_TYPING\x10\x03\x12\"\n" +
+	"\x1eSERVER_EVENT_TYPE_CHAT_CREATED\x10\x04\x12\"\n" +
+	"\x1eSERVER_EVENT_TYPE_CHAT_DELETED\x10\x052\xb3\x06\n" +
 	"\vChatService\x12?\n" +
 	"\bRegister\x12\x18.chat.v1.RegisterRequest\x1a\x19.chat.v1.RegisterResponse\x126\n" +
 	"\x05Login\x12\x15.chat.v1.LoginRequest\x1a\x16.chat.v1.LoginResponse\x12E\n" +
@@ -1711,7 +1792,7 @@ func file_chat_v1_chat_proto_rawDescGZIP() []byte {
 }
 
 var file_chat_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_chat_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_chat_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_chat_v1_chat_proto_goTypes = []any{
 	(ChatType)(0),                 // 0: chat.v1.ChatType
 	(ServerEventType)(0),          // 1: chat.v1.ServerEventType
@@ -1742,50 +1823,52 @@ var file_chat_v1_chat_proto_goTypes = []any{
 	(*SubscribeRequest)(nil),      // 26: chat.v1.SubscribeRequest
 	(*MessageReadEvent)(nil),      // 27: chat.v1.MessageReadEvent
 	(*TypingEvent)(nil),           // 28: chat.v1.TypingEvent
-	(*ServerEvent)(nil),           // 29: chat.v1.ServerEvent
-	(*timestamppb.Timestamp)(nil), // 30: google.protobuf.Timestamp
+	(*ChatEvent)(nil),             // 29: chat.v1.ChatEvent
+	(*ServerEvent)(nil),           // 30: chat.v1.ServerEvent
+	(*timestamppb.Timestamp)(nil), // 31: google.protobuf.Timestamp
 }
 var file_chat_v1_chat_proto_depIdxs = []int32{
 	0,  // 0: chat.v1.CreateChatRequest.type:type_name -> chat.v1.ChatType
 	0,  // 1: chat.v1.ChatInfo.type:type_name -> chat.v1.ChatType
-	30, // 2: chat.v1.ChatInfo.last_message_at:type_name -> google.protobuf.Timestamp
+	31, // 2: chat.v1.ChatInfo.last_message_at:type_name -> google.protobuf.Timestamp
 	8,  // 3: chat.v1.GetChatsResponse.chats:type_name -> chat.v1.ChatInfo
-	30, // 4: chat.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	31, // 4: chat.v1.Message.created_at:type_name -> google.protobuf.Timestamp
 	15, // 5: chat.v1.GetHistoryResponse.messages:type_name -> chat.v1.Message
 	15, // 6: chat.v1.SearchResponse.messages:type_name -> chat.v1.Message
 	1,  // 7: chat.v1.ServerEvent.type:type_name -> chat.v1.ServerEventType
 	15, // 8: chat.v1.ServerEvent.message:type_name -> chat.v1.Message
 	27, // 9: chat.v1.ServerEvent.read:type_name -> chat.v1.MessageReadEvent
 	28, // 10: chat.v1.ServerEvent.typing:type_name -> chat.v1.TypingEvent
-	2,  // 11: chat.v1.ChatService.Register:input_type -> chat.v1.RegisterRequest
-	4,  // 12: chat.v1.ChatService.Login:input_type -> chat.v1.LoginRequest
-	6,  // 13: chat.v1.ChatService.CreateChat:input_type -> chat.v1.CreateChatRequest
-	9,  // 14: chat.v1.ChatService.GetChats:input_type -> chat.v1.GetChatsRequest
-	11, // 15: chat.v1.ChatService.AddMember:input_type -> chat.v1.AddMemberRequest
-	13, // 16: chat.v1.ChatService.RemoveMember:input_type -> chat.v1.RemoveMemberRequest
-	16, // 17: chat.v1.ChatService.SendMessage:input_type -> chat.v1.SendMessageRequest
-	18, // 18: chat.v1.ChatService.GetHistory:input_type -> chat.v1.GetHistoryRequest
-	20, // 19: chat.v1.ChatService.Search:input_type -> chat.v1.SearchRequest
-	22, // 20: chat.v1.ChatService.MarkRead:input_type -> chat.v1.MarkReadRequest
-	24, // 21: chat.v1.ChatService.SendTyping:input_type -> chat.v1.SendTypingRequest
-	26, // 22: chat.v1.ChatService.Subscribe:input_type -> chat.v1.SubscribeRequest
-	3,  // 23: chat.v1.ChatService.Register:output_type -> chat.v1.RegisterResponse
-	5,  // 24: chat.v1.ChatService.Login:output_type -> chat.v1.LoginResponse
-	7,  // 25: chat.v1.ChatService.CreateChat:output_type -> chat.v1.CreateChatResponse
-	10, // 26: chat.v1.ChatService.GetChats:output_type -> chat.v1.GetChatsResponse
-	12, // 27: chat.v1.ChatService.AddMember:output_type -> chat.v1.AddMemberResponse
-	14, // 28: chat.v1.ChatService.RemoveMember:output_type -> chat.v1.RemoveMemberResponse
-	17, // 29: chat.v1.ChatService.SendMessage:output_type -> chat.v1.SendMessageResponse
-	19, // 30: chat.v1.ChatService.GetHistory:output_type -> chat.v1.GetHistoryResponse
-	21, // 31: chat.v1.ChatService.Search:output_type -> chat.v1.SearchResponse
-	23, // 32: chat.v1.ChatService.MarkRead:output_type -> chat.v1.MarkReadResponse
-	25, // 33: chat.v1.ChatService.SendTyping:output_type -> chat.v1.SendTypingResponse
-	29, // 34: chat.v1.ChatService.Subscribe:output_type -> chat.v1.ServerEvent
-	23, // [23:35] is the sub-list for method output_type
-	11, // [11:23] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	29, // 11: chat.v1.ServerEvent.chat:type_name -> chat.v1.ChatEvent
+	2,  // 12: chat.v1.ChatService.Register:input_type -> chat.v1.RegisterRequest
+	4,  // 13: chat.v1.ChatService.Login:input_type -> chat.v1.LoginRequest
+	6,  // 14: chat.v1.ChatService.CreateChat:input_type -> chat.v1.CreateChatRequest
+	9,  // 15: chat.v1.ChatService.GetChats:input_type -> chat.v1.GetChatsRequest
+	11, // 16: chat.v1.ChatService.AddMember:input_type -> chat.v1.AddMemberRequest
+	13, // 17: chat.v1.ChatService.RemoveMember:input_type -> chat.v1.RemoveMemberRequest
+	16, // 18: chat.v1.ChatService.SendMessage:input_type -> chat.v1.SendMessageRequest
+	18, // 19: chat.v1.ChatService.GetHistory:input_type -> chat.v1.GetHistoryRequest
+	20, // 20: chat.v1.ChatService.Search:input_type -> chat.v1.SearchRequest
+	22, // 21: chat.v1.ChatService.MarkRead:input_type -> chat.v1.MarkReadRequest
+	24, // 22: chat.v1.ChatService.SendTyping:input_type -> chat.v1.SendTypingRequest
+	26, // 23: chat.v1.ChatService.Subscribe:input_type -> chat.v1.SubscribeRequest
+	3,  // 24: chat.v1.ChatService.Register:output_type -> chat.v1.RegisterResponse
+	5,  // 25: chat.v1.ChatService.Login:output_type -> chat.v1.LoginResponse
+	7,  // 26: chat.v1.ChatService.CreateChat:output_type -> chat.v1.CreateChatResponse
+	10, // 27: chat.v1.ChatService.GetChats:output_type -> chat.v1.GetChatsResponse
+	12, // 28: chat.v1.ChatService.AddMember:output_type -> chat.v1.AddMemberResponse
+	14, // 29: chat.v1.ChatService.RemoveMember:output_type -> chat.v1.RemoveMemberResponse
+	17, // 30: chat.v1.ChatService.SendMessage:output_type -> chat.v1.SendMessageResponse
+	19, // 31: chat.v1.ChatService.GetHistory:output_type -> chat.v1.GetHistoryResponse
+	21, // 32: chat.v1.ChatService.Search:output_type -> chat.v1.SearchResponse
+	23, // 33: chat.v1.ChatService.MarkRead:output_type -> chat.v1.MarkReadResponse
+	25, // 34: chat.v1.ChatService.SendTyping:output_type -> chat.v1.SendTypingResponse
+	30, // 35: chat.v1.ChatService.Subscribe:output_type -> chat.v1.ServerEvent
+	24, // [24:36] is the sub-list for method output_type
+	12, // [12:24] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_chat_v1_chat_proto_init() }
@@ -1793,10 +1876,11 @@ func file_chat_v1_chat_proto_init() {
 	if File_chat_v1_chat_proto != nil {
 		return
 	}
-	file_chat_v1_chat_proto_msgTypes[27].OneofWrappers = []any{
+	file_chat_v1_chat_proto_msgTypes[28].OneofWrappers = []any{
 		(*ServerEvent_Message)(nil),
 		(*ServerEvent_Read)(nil),
 		(*ServerEvent_Typing)(nil),
+		(*ServerEvent_Chat)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1804,7 +1888,7 @@ func file_chat_v1_chat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chat_v1_chat_proto_rawDesc), len(file_chat_v1_chat_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

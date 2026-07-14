@@ -112,6 +112,7 @@ message Message {
   int64 sender_id = 3;
   string body = 4;
   google.protobuf.Timestamp created_at = 5;
+  string sender_login = 6; // логин отправителя (денормализовано для отображения)
 }
 
 message SendMessageRequest {
@@ -167,6 +168,8 @@ enum ServerEventType {
   SERVER_EVENT_TYPE_MESSAGE_NEW = 1;
   SERVER_EVENT_TYPE_MESSAGE_READ = 2;
   SERVER_EVENT_TYPE_TYPING = 3;
+  SERVER_EVENT_TYPE_CHAT_CREATED = 4; // пользователя добавили в чат
+  SERVER_EVENT_TYPE_CHAT_DELETED = 5; // чат удалён
 }
 
 // Событие «прочитано»: пользователь user_id сдвинул курсор до last_read_message_id.
@@ -182,6 +185,11 @@ message TypingEvent {
   int64 user_id = 2;
 }
 
+// Событие изменения списка чатов пользователя (создан/удалён).
+message ChatEvent {
+  int64 chat_id = 1;
+}
+
 // Событие сервера в стриме Subscribe. Полезная нагрузка зависит от type.
 message ServerEvent {
   ServerEventType type = 1;
@@ -189,5 +197,6 @@ message ServerEvent {
     Message message = 2;         // для MESSAGE_NEW
     MessageReadEvent read = 3;   // для MESSAGE_READ
     TypingEvent typing = 4;      // для TYPING
+    ChatEvent chat = 5;          // для CHAT_CREATED / CHAT_DELETED
   }
 }

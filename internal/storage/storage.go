@@ -8,14 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Storage владеет пулом подключений к PostgreSQL и репозиториями
 type Storage struct {
 	pool  *pgxpool.Pool
 	Users *UserRepo
 	Chats *ChatRepo
 }
 
-// New открывает пул подключений по DSN и проверяет доступность БД
+// New открывает пул подключений по DSN и проверяет доступность БД.
 func New(ctx context.Context, dsn string) (*Storage, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -32,7 +31,6 @@ func New(ctx context.Context, dsn string) (*Storage, error) {
 	}, nil
 }
 
-// Close закрывает пул подключений
 func (s *Storage) Close() {
 	s.pool.Close()
 }

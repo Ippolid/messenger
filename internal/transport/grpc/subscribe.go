@@ -4,8 +4,7 @@ import (
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 )
 
-// Subscribe открывает серверный стрим событий для текущего пользователя
-// Держит стрим до отмены контекста (клиент отключился) и пушит события из hub
+// Subscribe держит стрим до отмены контекста и пушит события из hub.
 func (s *Server) Subscribe(_ *chatv1.SubscribeRequest, stream chatv1.ChatService_SubscribeServer) error {
 	uid, _ := UserIDFromContext(stream.Context())
 
@@ -16,7 +15,6 @@ func (s *Server) Subscribe(_ *chatv1.SubscribeRequest, stream chatv1.ChatService
 	for {
 		select {
 		case <-ctx.Done():
-			// Клиент отключился или сервер завершается
 			return ctx.Err()
 		case ev, ok := <-events:
 			if !ok {

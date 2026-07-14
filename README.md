@@ -6,7 +6,7 @@
 - Go, gRPC + protobuf (buf)
 - PostgreSQL 16
 - Redis
-- TUI на Bubble Tea
+- Веб-клиент (HTTP/JSON + SSE), одностраничный
 - docker compose для окружения
 
 ## Требования
@@ -60,7 +60,9 @@ make down
 | `make build` | собрать все бинарники |
 | `make lint` | статический анализ (golangci-lint) |
 | `make test` | юнит- и интеграционные тесты |
-| `make run` / `make tui` / `make seed` | сервер / клиент / демо-данные (в разработке) |
+| `make run` | запустить сервер (gRPC + веб на http://localhost:8080) |
+| `make web` | открыть веб-клиент в браузере |
+| `make seed` | наполнить БД демо-данными (в разработке) |
 
 Строку подключения к БД можно переопределить: `make migrate-up DB_DSN=...`.
 
@@ -68,8 +70,8 @@ make down
 ```
 api/proto/         # определения gRPC (chat.proto)
 gen/               # сгенерированный код (buf generate)
-cmd/               # бинарники: chat-service, seed, tui
-internal/          # auth, chat, storage, broker, search, audit
+cmd/               # бинарники: chat-service, migrate, seed
+internal/          # auth, chat, storage, transport (grpc + httpapi)
 migrations/        # SQL-миграции (golang-migrate)
 deploy/            # docker-compose.yml
 docs/              # SQL-отчёты, EXPLAIN

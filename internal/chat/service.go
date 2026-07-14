@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 
+	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 	"github.com/Ippolid/messenger/internal/storage"
 )
 
-// Доменные ошибки (транспорт маппит их в gRPC-коды)
+// Доменные ошибки — транспорт маппит их в gRPC-коды.
 var (
 	ErrValidation       = errors.New("validation")
 	ErrPermissionDenied = errors.New("permission denied")
@@ -18,25 +19,20 @@ var (
 	ErrUserNotFound     = errors.New("user not found")
 )
 
-// Service — доменная логика чатов поверх хранилища и in-memory хаба
 type Service struct {
 	store *storage.Storage
 	hub   *Hub
 }
 
-// NewService создаёт сервис чатов
 func NewService(store *storage.Storage, hub *Hub) *Service {
 	return &Service{store: store, hub: hub}
 }
 
-// Hub возвращает хаб (транспорт использует его для Subscribe-стримов)
 func (s *Service) Hub() *Hub { return s.hub }
 
-// CreateChat создаёт чат по логинам участников
-// direct: ровно 2 участника (создатель + 1), без title
-// group: title обязателен, создатель становится admin
+// CreateChat создаёт чат по логинам участников.
+// direct: ровно 2 участника, без title; group: title обязателен, создатель — admin.
 func (s *Service) CreateChat(ctx context.Context, creatorID int64, chatType, title string, memberLogins []string) (int64, error) {
-	// Резолвим логины участников в id.
 	memberIDs, err := s.resolveLogins(ctx, memberLogins)
 	if err != nil {
 		return 0, err
@@ -45,12 +41,21 @@ func (s *Service) CreateChat(ctx context.Context, creatorID int64, chatType, tit
 	var titlePtr *string
 	switch chatType {
 	case "direct":
-		// Ровно один «другой» участник, без title
 		if len(memberIDs) != 1 {
 			return 0, fmt.Errorf("%w: direct chat requires exactly one other member", ErrValidation)
 		}
 		if title != "" {
 			return 0, fmt.Errorf("%w: direct chat must not have a title", ErrValidation)
+		}
+		peer := memberIDs[0]
+		if peer == creatorID {
+			return 0, fmt.Errorf("%w: cannot create a direct chat with yourself", ErrValidation)
+		}
+		// Личка уникальна: если уже есть — возвращаем существующую, не плодим дубли.
+		if existing, err := s.store.Chats.FindDirectChat(ctx, creatorID, peer); err != nil {
+			return 0, fmt.Errorf("find direct chat: %w", err)
+		} else if existing != 0 {
+			return existing, nil
 		}
 	case "group":
 		if title == "" {
@@ -61,15 +66,21 @@ func (s *Service) CreateChat(ctx context.Context, creatorID int64, chatType, tit
 		return 0, fmt.Errorf("%w: unknown chat type %q", ErrValidation, chatType)
 	}
 
-	return s.store.Chats.CreateChat(ctx, chatType, titlePtr, creatorID, memberIDs)
+	chatID, err := s.store.Chats.CreateChat(ctx, chatType, titlePtr, creatorID, memberIDs)
+	if err != nil {
+		return 0, err
+	}
+
+	// Уведомляем участников, чтобы новый чат появился у них в realtime.
+	s.publishChatEvent(memberIDs, chatID, chatv1.ServerEventType_SERVER_EVENT_TYPE_CHAT_CREATED)
+	return chatID, nil
 }
 
-// GetChats возвращает чаты пользователя (изоляция обеспечена SQL)
 func (s *Service) GetChats(ctx context.Context, userID int64) ([]storage.ChatListItem, error) {
 	return s.store.Chats.GetChats(ctx, userID)
 }
 
-// AddMember добавляет участника по логину. Только admin чата (иначе ErrPermissionDenied)
+// AddMember добавляет участника по логину; только admin чата.
 func (s *Service) AddMember(ctx context.Context, actorID, chatID int64, login, role string) error {
 	if err := s.requireAdmin(ctx, chatID, actorID); err != nil {
 		return err
@@ -87,13 +98,14 @@ func (s *Service) AddMember(ctx context.Context, actorID, chatID int64, login, r
 	if err := s.store.Chats.AddMember(ctx, chatID, uid, role); err != nil {
 		return fmt.Errorf("add member: %w", err)
 	}
-	// Аудит: add_member.
 	_ = s.store.InsertAudit(ctx, actorID, "add_member", "chat",
 		map[string]any{"chat_id": chatID, "login": login, "role": role})
+	// Добавленному пользователю чат должен появиться в realtime.
+	s.publishChatEvent([]int64{uid}, chatID, chatv1.ServerEventType_SERVER_EVENT_TYPE_CHAT_CREATED)
 	return nil
 }
 
-// RemoveMember удаляет участника по логину. Только admin чата
+// RemoveMember удаляет участника по логину; только admin чата.
 func (s *Service) RemoveMember(ctx context.Context, actorID, chatID int64, login string) error {
 	if err := s.requireAdmin(ctx, chatID, actorID); err != nil {
 		return err
@@ -108,14 +120,43 @@ func (s *Service) RemoveMember(ctx context.Context, actorID, chatID int64, login
 	if err := s.store.Chats.RemoveMember(ctx, chatID, uid); err != nil {
 		return fmt.Errorf("remove member: %w", err)
 	}
-	// Аудит: remove_member.
 	_ = s.store.InsertAudit(ctx, actorID, "remove_member", "chat",
 		map[string]any{"chat_id": chatID, "login": login})
 	return nil
 }
 
-// requireAdmin проверяет, что пользователь — admin чата. Иначе ErrPermissionDenied
-// (или ErrNotMember, если он вообще не участник — тоже недостаточно прав).
+// DeleteChat удаляет чат. Для группы — только admin; для лички — любой её участник.
+func (s *Service) DeleteChat(ctx context.Context, actorID, chatID int64) error {
+	role, err := s.store.Chats.GetRole(ctx, chatID, actorID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotMember) {
+			return ErrPermissionDenied
+		}
+		return fmt.Errorf("get role: %w", err)
+	}
+	// В группе удалить может только admin; в личке — любой участник.
+	chatType, err := s.store.Chats.GetType(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("get chat type: %w", err)
+	}
+	if chatType == "group" && role != "admin" {
+		return ErrPermissionDenied
+	}
+
+	// Список участников получаем ДО удаления — после DeleteChat их уже не достать.
+	memberIDs, _ := s.store.Chats.MemberIDs(ctx, chatID)
+
+	if err := s.store.Chats.DeleteChat(ctx, chatID); err != nil {
+		return fmt.Errorf("delete chat: %w", err)
+	}
+	_ = s.store.InsertAudit(ctx, actorID, "delete_chat", "chat", map[string]any{"chat_id": chatID})
+
+	// Уведомляем всех участников, чтобы чат исчез у них в realtime.
+	s.publishChatEvent(memberIDs, chatID, chatv1.ServerEventType_SERVER_EVENT_TYPE_CHAT_DELETED)
+	return nil
+}
+
+// requireAdmin проверяет, что пользователь — admin чата, иначе ErrPermissionDenied.
 func (s *Service) requireAdmin(ctx context.Context, chatID, userID int64) error {
 	role, err := s.store.Chats.GetRole(ctx, chatID, userID)
 	if err != nil {
@@ -130,7 +171,7 @@ func (s *Service) requireAdmin(ctx context.Context, chatID, userID int64) error 
 	return nil
 }
 
-// resolveLogins переводит логины в id, возвращая ErrUserNotFound при отсутствии любого
+// resolveLogins переводит логины в id, возвращая ErrUserNotFound при отсутствии любого.
 func (s *Service) resolveLogins(ctx context.Context, logins []string) ([]int64, error) {
 	ids := make([]int64, 0, len(logins))
 	for _, login := range logins {
@@ -146,7 +187,7 @@ func (s *Service) resolveLogins(ctx context.Context, logins []string) ([]int64, 
 	return ids, nil
 }
 
-// outboxEvent — форма payload для outbox (JSON события message.new)
+// outboxEvent — JSON-форма события message.new для outbox.
 type outboxEvent struct {
 	Type      string `json:"type"`
 	MessageID int64  `json:"message_id"`
@@ -155,7 +196,6 @@ type outboxEvent struct {
 	Body      string `json:"body"`
 }
 
-// marshalMessagePayload формирует JSON события message.new для outbox
 func marshalMessagePayload(chatID, senderID int64, body string) func(int64) ([]byte, error) {
 	return func(msgID int64) ([]byte, error) {
 		return json.Marshal(outboxEvent{

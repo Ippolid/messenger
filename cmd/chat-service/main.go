@@ -6,12 +6,15 @@ import (
 	"errors"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Ippolid/messenger/internal/chat"
 	grpcserver "github.com/Ippolid/messenger/internal/transport/grpc"
+	"github.com/Ippolid/messenger/internal/transport/httpapi"
 
 	"github.com/Ippolid/messenger/internal/auth"
 	"github.com/Ippolid/messenger/internal/storage"
@@ -25,10 +28,11 @@ func main() {
 
 func run() error {
 	addr := envOr("GRPC_ADDR", ":50051")
+	httpAddr := envOr("HTTP_ADDR", ":8080")
 	dsn := envOr("DB_DSN", "postgres://messenger:messenger@localhost:5432/messenger?sslmode=disable")
 	jwtSecret := envOr("JWT_SECRET", "dev-secret-change-me")
 
-	// для graceful shutdown.
+	// Ctx отменяется по SIGINT/SIGTERM — для graceful shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -51,21 +55,41 @@ func run() error {
 		return err
 	}
 
-	// Останавливаем сервер по сигналу.
+	httpSrv := &http.Server{
+		Addr:              httpAddr,
+		Handler:           httpapi.NewServer(authSvc, chatSvc, tokens).Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	// Останавливаем оба сервера по сигналу.
 	go func() {
 		<-ctx.Done()
-		log.Println("shutting down gRPC server...")
+		log.Println("shutting down servers...")
 		srv.GracefulStop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpSrv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("chat-service listening on %s", addr)
-	if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
+	// gRPC-сервер — в отдельной горутине; ошибку отдаём через канал.
+	grpcErr := make(chan error, 1)
+	go func() {
+		log.Printf("gRPC listening on %s", addr)
+		if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
+			grpcErr <- err
+			return
+		}
+		grpcErr <- nil
+	}()
+
+	// HTTP-сервер — блокирующе в основной горутине.
+	log.Printf("HTTP (web client) listening on %s", httpAddr)
+	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
-	return nil
+	return <-grpcErr
 }
 
-// envOr возвращает значение переменной окружения или дефолт
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

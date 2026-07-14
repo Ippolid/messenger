@@ -11,24 +11,21 @@ import (
 // ErrInvalidToken возвращается при некорректном или просроченном JWT.
 var ErrInvalidToken = errors.New("invalid token")
 
-// Claims — полезная нагрузка access-JWT. Содержит user_id в поле subject.
+// Claims — полезная нагрузка access-JWT.
 type Claims struct {
 	UserID int64 `json:"uid"`
 	jwt.RegisteredClaims
 }
 
-// TokenManager выпускает и проверяет access-JWT
 type TokenManager struct {
 	secret    []byte
 	accessTTL time.Duration
 }
 
-// NewTokenManager создаёт менеджер токенов с заданным секретом и TTL
 func NewTokenManager(secret string, accessTTL time.Duration) *TokenManager {
 	return &TokenManager{secret: []byte(secret), accessTTL: accessTTL}
 }
 
-// GenerateAccess выпускает подписанный access-JWT для пользователя.
 func (m *TokenManager) GenerateAccess(userID int64, now time.Time) (string, error) {
 	claims := Claims{
 		UserID: userID,
@@ -45,11 +42,10 @@ func (m *TokenManager) GenerateAccess(userID int64, now time.Time) (string, erro
 	return signed, nil
 }
 
-// ParseAccess проверяет подпись и срок действия токена, возвращает user_id
 func (m *TokenManager) ParseAccess(tokenStr string) (int64, error) {
 	var claims Claims
 	_, err := jwt.ParseWithClaims(tokenStr, &claims, func(t *jwt.Token) (any, error) {
-		// Защита от подмены алгоритма
+		// Защита от подмены алгоритма (alg confusion).
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}

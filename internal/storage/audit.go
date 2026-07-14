@@ -6,9 +6,7 @@ import (
 	"fmt"
 )
 
-// InsertAudit добавляет запись в журнал аудита.
-// userID может быть 0/NULL для событий без известного пользователя (не наш случай).
-// details сериализуется в JSONB; nil-details допустим.
+// InsertAudit добавляет запись в журнал аудита; details сериализуется в JSONB (nil допустим).
 func (s *Storage) InsertAudit(ctx context.Context, userID int64, action, entity string, details map[string]any) error {
 	var payload []byte
 	if details != nil {

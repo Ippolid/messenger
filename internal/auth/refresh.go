@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-// generateRefreshToken возвращает случайный высокоэнтропийный refresh-токен
+// generateRefreshToken — 256 бит энтропии из crypto/rand.
 func generateRefreshToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -16,7 +16,8 @@ func generateRefreshToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// hashRefreshToken хэширует refresh-токен для хранения в БД.
+// Токен уже высокоэнтропийный, поэтому для хранения хватает SHA-256 —
+// bcrypt не нужен (нет риска брутфорса, как у паролей).
 func hashRefreshToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

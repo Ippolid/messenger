@@ -12,18 +12,16 @@ import (
 	"github.com/Ippolid/messenger/internal/auth"
 )
 
-// publicMethods — методы, не требующие JWT (полные имена gRPC)
+// publicMethods — методы без JWT (полные gRPC-имена).
 var publicMethods = map[string]bool{
 	"/chat.v1.ChatService/Register": true,
 	"/chat.v1.ChatService/Login":    true,
 }
 
-// authInterceptor проверяет JWT для всех методов кроме whitelisted и кладёт user_id в контекст.
 type authInterceptor struct {
 	tokens *auth.TokenManager
 }
 
-// authenticate извлекает и проверяет токен из metadata, возвращая обогащённый контекст
 func (a *authInterceptor) authenticate(ctx context.Context, method string) (context.Context, error) {
 	// Служебный сервис reflection (используется grpcurl) не требует авторизации.
 	if publicMethods[method] || strings.HasPrefix(method, "/grpc.reflection.") {
@@ -51,7 +49,6 @@ func (a *authInterceptor) authenticate(ctx context.Context, method string) (cont
 	return withUserID(ctx, userID), nil
 }
 
-// Unary возвращает unary-интерсептор аутентификации.
 func (a *authInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		ctx, err := a.authenticate(ctx, info.FullMethod)
@@ -62,7 +59,6 @@ func (a *authInterceptor) Unary() grpc.UnaryServerInterceptor {
 	}
 }
 
-// Stream возвращает stream-интерсептор аутентификации.
 func (a *authInterceptor) Stream() grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx, err := a.authenticate(ss.Context(), info.FullMethod)
