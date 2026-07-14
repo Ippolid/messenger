@@ -9,7 +9,7 @@ BUF          := go tool buf
 MIGRATE      := go run ./cmd/migrate
 GOLANGCILINT := go tool golangci-lint
 
-.PHONY: dev up down build proto migrate-up migrate-down seed run web lint test
+.PHONY: dev up down build vet proto migrate-up migrate-down seed run web lint test
 
 ## dev: поднять всё окружение одной командой (up + proto + миграции)
 dev: up proto migrate-up
@@ -27,6 +27,10 @@ down:
 ## build: собрать все бинарники
 build:
 	go build ./...
+
+## vet: стандартный статический анализ Go
+vet:
+	go vet ./...
 
 ## proto: сгенерировать gRPC-код из proto
 proto:

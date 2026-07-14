@@ -1,0 +1,12 @@
+EXPLAIN ANALYZE
+SELECT id, body
+FROM messages
+WHERE chat_id = 1 AND id < 999999
+ORDER BY id DESC
+LIMIT 50;
+
+Limit  (cost=0.15..8.17 rows=1 width=40) (actual time=0.029..0.033 rows=34 loops=1)
+  ->  Index Scan using idx_messages_chat_id_id on messages  (cost=0.15..8.17 rows=1 width=40) (actual time=0.028..0.031 rows=34 loops=1)
+        Index Cond: ((chat_id = 1) AND (id < 999999))
+Planning Time: 0.418 ms
+Execution Time: 0.051 ms
