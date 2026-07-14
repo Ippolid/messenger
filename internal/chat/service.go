@@ -3,7 +3,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -185,25 +184,4 @@ func (s *Service) resolveLogins(ctx context.Context, logins []string) ([]int64, 
 		ids = append(ids, id)
 	}
 	return ids, nil
-}
-
-// outboxEvent — JSON-форма события message.new для outbox.
-type outboxEvent struct {
-	Type      string `json:"type"`
-	MessageID int64  `json:"message_id"`
-	ChatID    int64  `json:"chat_id"`
-	SenderID  int64  `json:"sender_id"`
-	Body      string `json:"body"`
-}
-
-func marshalMessagePayload(chatID, senderID int64, body string) func(int64) ([]byte, error) {
-	return func(msgID int64) ([]byte, error) {
-		return json.Marshal(outboxEvent{
-			Type:      "message.new",
-			MessageID: msgID,
-			ChatID:    chatID,
-			SenderID:  senderID,
-			Body:      body,
-		})
-	}
 }
