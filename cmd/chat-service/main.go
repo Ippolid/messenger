@@ -14,6 +14,7 @@ import (
 
 	"github.com/Ippolid/messenger/internal/broker"
 	"github.com/Ippolid/messenger/internal/chat"
+	"github.com/Ippolid/messenger/internal/ratelimit"
 	grpcserver "github.com/Ippolid/messenger/internal/transport/grpc"
 	"github.com/Ippolid/messenger/internal/transport/httpapi"
 
@@ -49,6 +50,7 @@ func run() error {
 
 	hub := chat.NewHub()
 	chatSvc := chat.NewService(store, hub)
+	limiter := ratelimit.New()
 
 	// Брокер Redis Streams + горутины relay (outbox→Redis) и fanout (Redis→hub).
 	rdb := broker.NewRedis(redisAddr, "fanout-1")
@@ -59,7 +61,7 @@ func run() error {
 	go chat.NewRelay(rdb, store).Run(ctx)
 	go chat.NewFanout(rdb, store, hub).Run(ctx)
 
-	srv := grpcserver.New(authSvc, chatSvc, tokens)
+	srv := grpcserver.New(authSvc, chatSvc, tokens, limiter)
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -68,7 +70,7 @@ func run() error {
 
 	httpSrv := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpapi.NewServer(authSvc, chatSvc, tokens).Handler(),
+		Handler:           httpapi.NewServer(authSvc, chatSvc, tokens, limiter).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

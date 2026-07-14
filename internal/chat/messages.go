@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
@@ -57,6 +58,20 @@ func (s *Service) GetHistory(ctx context.Context, userID, chatID, beforeID int64
 		limit = 50
 	}
 	return s.store.Chats.GetHistory(ctx, chatID, beforeID, limit)
+}
+
+// Search ищет сообщения в чате после проверки, что пользователь состоит в нём.
+func (s *Service) Search(ctx context.Context, userID, chatID int64, query string) ([]storage.Message, error) {
+	if strings.TrimSpace(query) == "" {
+		return []storage.Message{}, nil
+	}
+	if _, err := s.store.Chats.GetRole(ctx, chatID, userID); err != nil {
+		if errors.Is(err, storage.ErrNotMember) {
+			return nil, ErrPermissionDenied
+		}
+		return nil, fmt.Errorf("get role: %w", err)
+	}
+	return s.store.Chats.SearchMessages(ctx, chatID, query, 50)
 }
 
 // MarkRead сдвигает read-курсор и рассылает событие message.read участникам.

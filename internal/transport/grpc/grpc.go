@@ -7,12 +7,13 @@ import (
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 	"github.com/Ippolid/messenger/internal/auth"
 	"github.com/Ippolid/messenger/internal/chat"
+	"github.com/Ippolid/messenger/internal/ratelimit"
 )
 
-func New(authSvc *auth.Service, chatSvc *chat.Service, tokens *auth.TokenManager) *grpc.Server {
+func New(authSvc *auth.Service, chatSvc *chat.Service, tokens *auth.TokenManager, limiter *ratelimit.Limiter) *grpc.Server {
 	ai := &authInterceptor{tokens: tokens}
 	srv := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(ai.Unary()),
+		grpc.ChainUnaryInterceptor(ai.Unary(), rateLimitInterceptor(limiter)),
 		grpc.ChainStreamInterceptor(ai.Stream()),
 	)
 	chatv1.RegisterChatServiceServer(srv, NewServer(authSvc, chatSvc))

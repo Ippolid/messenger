@@ -117,6 +117,10 @@
   }
   .main-head .title{font-weight:600;font-size:16px}
   .main-head .status{color:var(--muted);font-size:12.5px;margin-top:1px;min-height:16px}
+  .chat-search{width:min(240px,32vw);padding:9px 13px;background:var(--soft);border:1.5px solid transparent;border-radius:18px;color:var(--ink);font-size:13px}
+  .chat-search:focus{border-color:var(--accent-b)}
+  .search-caption{align-self:center;color:var(--muted);font-size:12px;background:var(--panel);padding:4px 12px;border-radius:12px;box-shadow:var(--shadow-sm)}
+  mark{background:#fff0a8;color:inherit;border-radius:3px;padding:0 1px}
   .feed{flex:1;overflow-y:auto;padding:24px 26px;display:flex;flex-direction:column;gap:4px}
   .row{display:flex;gap:10px;margin-top:10px;align-items:flex-end}
   .row.me{flex-direction:row-reverse}
@@ -236,6 +240,7 @@
         <div class="title" id="headTitle"></div>
         <div class="status" id="headStatus"></div>
       </div>
+      <input class="chat-search" id="searchInput" placeholder="Поиск сообщений…" autocomplete="off" title="Поиск по сообщениям">
       <button class="icon-btn" id="deleteChatBtn" title="Удалить чат">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
       </button>
@@ -279,6 +284,7 @@ const state = {
   token:null, userID:0, login:'',
   chats:[], activeChat:null,
   messages:{}, seen:{}, typingUntil:{},
+  searchQuery:'', searchResults:[],
   es:null,
 };
 
@@ -395,6 +401,7 @@ function renderChatList(){
 // ---------- Открытие чата ----------
 async function openChat(id){
   state.activeChat=id;
+  clearSearch(false);
   const c=chatByID(id);
   if(c) c.unread_count=0;
   document.getElementById('mainHead').style.display='flex';
@@ -419,6 +426,7 @@ async function openChat(id){
 // ---------- Лента ----------
 function renderFeed(){
   const feed=document.getElementById('feed');
+  if(state.searchQuery){ return renderSearchResults(feed); }
   const msgs=state.messages[state.activeChat]||[];
   const c=chatByID(state.activeChat);
   const isGroup = c && c.type==='group';
@@ -467,6 +475,45 @@ function renderFeed(){
   feed.scrollTop=feed.scrollHeight;
 }
 
+function renderSearchResults(feed){
+  const results=state.searchResults;
+  feed.innerHTML='';
+  const caption=document.createElement('div'); caption.className='search-caption';
+  caption.textContent=results.length ? `Найдено: ${results.length}` : 'Ничего не найдено';
+  feed.appendChild(caption);
+  for(const m of results){
+    const row=document.createElement('div'); row.className='row '+(m.sender_id===state.userID?'me':'them');
+    const sender=m.sender_login||('user '+m.sender_id);
+    row.innerHTML=`<div class="bubble-wrap"><div class="sender">${escapeHTML(sender)}</div><div class="bubble">${highlightHTML(m.body,state.searchQuery)}</div><div class="meta">${fmtTime(m.at)}</div></div>`;
+    feed.appendChild(row);
+  }
+}
+
+const searchInput=document.getElementById('searchInput');
+let searchTimer=0;
+searchInput.addEventListener('input', ()=>{
+  clearTimeout(searchTimer);
+  const query=searchInput.value.trim();
+  if(!query){ clearSearch(); return; }
+  searchTimer=setTimeout(()=>searchMessages(query),250);
+});
+searchInput.addEventListener('keydown', e=>{ if(e.key==='Escape'){ clearSearch(); document.getElementById('msgInput').focus(); } });
+
+async function searchMessages(query){
+  if(state.activeChat===null) return;
+  try{
+    const results=await api('/api/search?chat_id='+state.activeChat+'&q='+encodeURIComponent(query));
+    if(query!==searchInput.value.trim()) return;
+    state.searchQuery=query; state.searchResults=results; renderFeed();
+  }catch(e){ console.error(e); }
+}
+function clearSearch(render=true){
+  clearTimeout(searchTimer);
+  state.searchQuery=''; state.searchResults=[];
+  if(searchInput) searchInput.value='';
+  if(render && state.activeChat!==null) renderFeed();
+}
+
 // ---------- Отправка ----------
 const msgInput=document.getElementById('msgInput');
 const sendBtn=document.getElementById('sendBtn');
@@ -488,7 +535,7 @@ async function sendMessage(){
     state.seen[chatID].add(res.message_id);
     const c=chatByID(chatID); if(c) c.last_message_body=body;
     renderFeed(); renderChatList();
-  }catch(e){ optimistic.status='error'; alert('Не отправлено: '+e.message); }
+  }catch(e){ optimistic.status='error'; alert(e.message==='слишком часто, подождите' ? e.message : 'Не отправлено: '+e.message); }
 }
 
 let lastTyping=0;
@@ -692,6 +739,11 @@ function mapHistory(hist, chatID){
 }
 
 function escapeHTML(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function highlightHTML(text, query){
+  const words=query.trim().split(/\s+/).filter(Boolean).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  if(!words.length) return escapeHTML(text);
+  return escapeHTML(text).replace(new RegExp('('+words.join('|')+')','gi'),'<mark>$1</mark>');
+}
 function fmtTime(iso){ if(!iso) return ''; const d=new Date(iso); return isNaN(d)?'':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 function dayLabel(iso){
   if(!iso) return '';

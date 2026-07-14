@@ -33,6 +33,16 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.limiter.Allow(userID(r.Context())) {
+			writeErr(w, http.StatusTooManyRequests, "слишком часто, подождите")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func bearerToken(r *http.Request) string {
 	h := r.Header.Get("Authorization")
 	if token, ok := strings.CutPrefix(h, "Bearer "); ok {

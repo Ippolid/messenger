@@ -65,6 +65,32 @@ LIMIT $3`
 	return msgs, rows.Err()
 }
 
+// SearchMessages выполняет полнотекстовый поиск по сообщениям одного чата.
+func (r *ChatRepo) SearchMessages(ctx context.Context, chatID int64, query string, limit int) ([]Message, error) {
+	const q = `
+SELECT m.id, m.chat_id, m.sender_id, u.login, m.body, m.created_at
+FROM messages m
+JOIN users u ON u.id = m.sender_id
+WHERE m.chat_id = $1 AND m.body_tsv @@ plainto_tsquery('russian', $2)
+ORDER BY m.id DESC
+LIMIT $3`
+	rows, err := r.pool.Query(ctx, q, chatID, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search messages: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ChatID, &m.SenderID, &m.SenderLogin, &m.Body, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, rows.Err()
+}
+
 // MarkRead сдвигает read-курсор пользователя в чате.
 // Курсор только растёт: GREATEST не даёт откатить его назад.
 func (r *ChatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64) error {
