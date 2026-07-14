@@ -88,6 +88,19 @@ func (s *Server) GetHistory(ctx context.Context, req *chatv1.GetHistoryRequest) 
 	return resp, nil
 }
 
+func (s *Server) Search(ctx context.Context, req *chatv1.SearchRequest) (*chatv1.SearchResponse, error) {
+	uid, _ := UserIDFromContext(ctx)
+	msgs, err := s.chatSvc.Search(ctx, uid, req.GetChatId(), req.GetQuery())
+	if err != nil {
+		return nil, chatError(err)
+	}
+	resp := &chatv1.SearchResponse{Messages: make([]*chatv1.Message, 0, len(msgs))}
+	for _, m := range msgs {
+		resp.Messages = append(resp.Messages, messageToProto(m))
+	}
+	return resp, nil
+}
+
 func (s *Server) MarkRead(ctx context.Context, req *chatv1.MarkReadRequest) (*chatv1.MarkReadResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	if err := s.chatSvc.MarkRead(ctx, uid, req.GetChatId(), req.GetMessageId()); err != nil {

@@ -87,6 +87,20 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	chatID, _ := strconv.ParseInt(r.URL.Query().Get("chat_id"), 10, 64)
+	msgs, err := s.chat.Search(r.Context(), userID(r.Context()), chatID, r.URL.Query().Get("q"))
+	if err != nil {
+		s.writeChatErr(w, err)
+		return
+	}
+	out := make([]messageJSON, 0, len(msgs))
+	for _, m := range msgs {
+		out = append(out, messageToJSON(m))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type sendMessageRequest struct {
 	ChatID int64  `json:"chat_id"`
 	Body   string `json:"body"`
