@@ -9,7 +9,6 @@ import (
 	"github.com/Ippolid/messenger/internal/chat"
 )
 
-// New собирает *grpc.Server с auth-интерсепторами и зарегистрированным ChatService.
 func New(authSvc *auth.Service, chatSvc *chat.Service, tokens *auth.TokenManager) *grpc.Server {
 	ai := &authInterceptor{tokens: tokens}
 	srv := grpc.NewServer(

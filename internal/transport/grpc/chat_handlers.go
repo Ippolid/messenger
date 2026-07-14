@@ -13,7 +13,6 @@ import (
 	"github.com/Ippolid/messenger/internal/storage"
 )
 
-// CreateChat создаёт чат от имени текущего пользователя.
 func (s *Server) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	chatID, err := s.chatSvc.CreateChat(ctx, uid, chatTypeToString(req.GetType()), req.GetTitle(), req.GetMemberLogins())
@@ -23,7 +22,6 @@ func (s *Server) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest) 
 	return &chatv1.CreateChatResponse{ChatId: chatID}, nil
 }
 
-// GetChats возвращает чаты текущего пользователя
 func (s *Server) GetChats(ctx context.Context, _ *chatv1.GetChatsRequest) (*chatv1.GetChatsResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	items, err := s.chatSvc.GetChats(ctx, uid)
@@ -52,7 +50,6 @@ func (s *Server) GetChats(ctx context.Context, _ *chatv1.GetChatsRequest) (*chat
 	return resp, nil
 }
 
-// AddMember добавляет участника (только admin).
 func (s *Server) AddMember(ctx context.Context, req *chatv1.AddMemberRequest) (*chatv1.AddMemberResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	if err := s.chatSvc.AddMember(ctx, uid, req.GetChatId(), req.GetLogin(), req.GetRole()); err != nil {
@@ -61,7 +58,6 @@ func (s *Server) AddMember(ctx context.Context, req *chatv1.AddMemberRequest) (*
 	return &chatv1.AddMemberResponse{}, nil
 }
 
-// RemoveMember удаляет участника (только admin).
 func (s *Server) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberRequest) (*chatv1.RemoveMemberResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	if err := s.chatSvc.RemoveMember(ctx, uid, req.GetChatId(), req.GetLogin()); err != nil {
@@ -70,7 +66,6 @@ func (s *Server) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReque
 	return &chatv1.RemoveMemberResponse{}, nil
 }
 
-// SendMessage сохраняет сообщение и возвращает его id.
 func (s *Server) SendMessage(ctx context.Context, req *chatv1.SendMessageRequest) (*chatv1.SendMessageResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	msgID, err := s.chatSvc.SendMessage(ctx, uid, req.GetChatId(), req.GetBody())
@@ -80,7 +75,6 @@ func (s *Server) SendMessage(ctx context.Context, req *chatv1.SendMessageRequest
 	return &chatv1.SendMessageResponse{MessageId: msgID}, nil
 }
 
-// GetHistory возвращает историю чата keyset-пагинацией.
 func (s *Server) GetHistory(ctx context.Context, req *chatv1.GetHistoryRequest) (*chatv1.GetHistoryResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	msgs, err := s.chatSvc.GetHistory(ctx, uid, req.GetChatId(), req.GetBeforeId(), int(req.GetLimit()))
@@ -94,7 +88,6 @@ func (s *Server) GetHistory(ctx context.Context, req *chatv1.GetHistoryRequest) 
 	return resp, nil
 }
 
-// MarkRead сдвигает read-курсор
 func (s *Server) MarkRead(ctx context.Context, req *chatv1.MarkReadRequest) (*chatv1.MarkReadResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	if err := s.chatSvc.MarkRead(ctx, uid, req.GetChatId(), req.GetMessageId()); err != nil {
@@ -103,7 +96,6 @@ func (s *Server) MarkRead(ctx context.Context, req *chatv1.MarkReadRequest) (*ch
 	return &chatv1.MarkReadResponse{}, nil
 }
 
-// SendTyping рассылает эфемерное событие «печатает»
 func (s *Server) SendTyping(ctx context.Context, req *chatv1.SendTypingRequest) (*chatv1.SendTypingResponse, error) {
 	uid, _ := UserIDFromContext(ctx)
 	if err := s.chatSvc.SendTyping(ctx, uid, req.GetChatId()); err != nil {
@@ -112,7 +104,6 @@ func (s *Server) SendTyping(ctx context.Context, req *chatv1.SendTypingRequest) 
 	return &chatv1.SendTypingResponse{}, nil
 }
 
-// messageToProto конвертирует доменное сообщение в proto.
 func messageToProto(m storage.Message) *chatv1.Message {
 	return &chatv1.Message{
 		Id:        m.ID,
@@ -123,7 +114,6 @@ func messageToProto(m storage.Message) *chatv1.Message {
 	}
 }
 
-// chatTypeToString переводит enum proto в строку для БД.
 func chatTypeToString(t chatv1.ChatType) string {
 	switch t {
 	case chatv1.ChatType_CHAT_TYPE_DIRECT:
@@ -135,7 +125,6 @@ func chatTypeToString(t chatv1.ChatType) string {
 	}
 }
 
-// chatTypeFromString переводит строку из БД в enum proto.
 func chatTypeFromString(s string) chatv1.ChatType {
 	switch s {
 	case "direct":
@@ -147,7 +136,6 @@ func chatTypeFromString(s string) chatv1.ChatType {
 	}
 }
 
-// chatError маппит доменные ошибки chat в gRPC-статусы.
 func chatError(err error) error {
 	switch {
 	case errors.Is(err, chat.ErrPermissionDenied):

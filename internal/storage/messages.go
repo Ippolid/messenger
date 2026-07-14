@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// SaveMessage сохраняет сообщение и запись в outbox в ОДНОЙ транзакции
+// SaveMessage сохраняет сообщение и запись в outbox в ОДНОЙ транзакции.
 func (r *ChatRepo) SaveMessage(ctx context.Context, chatID, senderID int64, body string, outboxPayload func(msgID int64) ([]byte, error)) (Message, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -13,7 +13,6 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, chatID, senderID int64, body
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback после commit — no-op
 
-	// 1. Вставляем сообщение, получаем монотонный id и время
 	const insMsg = `INSERT INTO messages (chat_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, created_at`
 	var m Message
 	m.ChatID = chatID
@@ -23,7 +22,7 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, chatID, senderID int64, body
 		return Message{}, fmt.Errorf("insert message: %w", err)
 	}
 
-	// 2. Формируем payload события (нужен уже известный m.ID) и пишем в outbox
+	// payload формируем после вставки — нужен уже известный m.ID.
 	payload, err := outboxPayload(m.ID)
 	if err != nil {
 		return Message{}, fmt.Errorf("build outbox payload: %w", err)
@@ -39,15 +38,15 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, chatID, senderID int64, body
 	return m, nil
 }
 
-// GetHistory возвращает историю чата keyset-пагинацией (WHERE id < beforeID), НЕ OFFSET
-// beforeID == 0 означает «с конца». Сообщения возвращаются по убыванию id
+// GetHistory возвращает историю keyset-пагинацией (WHERE id < beforeID), НЕ OFFSET.
+// beforeID == 0 означает «с конца», без верхней границы.
 func (r *ChatRepo) GetHistory(ctx context.Context, chatID int64, beforeID int64, limit int) ([]Message, error) {
-	// $2 == 0 трактуем как «без верхней границы» через (beforeID = 0 OR id < beforeID).
 	const q = `
-SELECT id, chat_id, sender_id, body, created_at
-FROM messages
-WHERE chat_id = $1 AND ($2 = 0 OR id < $2)
-ORDER BY id DESC
+SELECT m.id, m.chat_id, m.sender_id, u.login, m.body, m.created_at
+FROM messages m
+JOIN users u ON u.id = m.sender_id
+WHERE m.chat_id = $1 AND ($2 = 0 OR m.id < $2)
+ORDER BY m.id DESC
 LIMIT $3`
 	rows, err := r.pool.Query(ctx, q, chatID, beforeID, limit)
 	if err != nil {
@@ -58,7 +57,7 @@ LIMIT $3`
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChatID, &m.SenderID, &m.Body, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChatID, &m.SenderID, &m.SenderLogin, &m.Body, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		msgs = append(msgs, m)

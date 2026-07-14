@@ -1,14 +1,5 @@
-// Command migrate — тонкая обёртка над golang-migrate, собранная с нужными
-// драйверами (postgres + file). Запускается через `go tool migrate` или
-// `go run ./cmd/migrate`, поэтому CLI golang-migrate не нужно ставить в PATH.
-//
-// Использование:
-//
-//	go run ./cmd/migrate up          # применить все миграции
-//	go run ./cmd/migrate down        # откатить все миграции
-//	go run ./cmd/migrate version     # текущая версия схемы
-//
-// DSN берётся из флага -database или переменной окружения DB_DSN,
+// Command migrate — обёртка над golang-migrate со вшитыми драйверами.
+// Команды: up | down | version. DSN — из флага -database или DB_DSN,
 // путь к миграциям — из флага -path (по умолчанию ./migrations).
 package main
 
@@ -20,8 +11,8 @@ import (
 	"os"
 
 	"github.com/golang-migrate/migrate/v4"
-	// Драйверы регистрируются через blank-импорт — это и делает бинарник
-	// самодостаточным (в отличие от `go tool` над стандартным CLI migrate).
+	// Blank-импорт драйверов делает бинарник самодостаточным
+	// (в отличие от `go tool` над стандартным CLI migrate).
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -48,7 +39,7 @@ func main() {
 		log.Fatalf("init migrate: %v", err)
 	}
 	defer func() {
-		// Close возвращает ошибки source и database; при завершении их достаточно залогировать
+		// Close возвращает ошибки source и database — их достаточно залогировать.
 		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
 			log.Printf("close migrate: source=%v database=%v", srcErr, dbErr)
 		}

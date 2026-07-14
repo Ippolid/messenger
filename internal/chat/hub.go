@@ -6,32 +6,29 @@ import (
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 )
 
-// subscriber — один открытый Subscribe-стрим
+// subscriber — один открытый Subscribe-стрим.
 type subscriber struct {
 	userID int64
 	ch     chan *chatv1.ServerEvent
 }
 
-// Hub — in-memory реестр подписчиков
-// Один пользователь может иметь несколько стримов (несколько клиентов)
+// Hub — in-memory реестр подписчиков; у пользователя может быть несколько стримов.
 // Потокобезопасен: все операции под RWMutex.
 type Hub struct {
 	mu   sync.RWMutex
 	subs map[int64]map[*subscriber]struct{}
 }
 
-// NewHub создаёт пустой хаб.
 func NewHub() *Hub {
 	return &Hub{subs: make(map[int64]map[*subscriber]struct{})}
 }
 
-// bufferSize — размер буфера канала подписчика. Небольшой буфер сглаживает
-// всплески; при переполнении событие для медленного клиента дропается (typing/новые
-// сообщения всё равно подтянутся из истории).
+// bufferSize сглаживает всплески; при переполнении событие для медленного клиента
+// дропается — новые сообщения всё равно подтянутся из истории.
 const bufferSize = 64
 
-// Subscribe регистрирует нового подписчика пользователя и возвращает его канал
-// и функцию отписки. Отписку нужно вызвать при завершении стрима.
+// Subscribe регистрирует подписчика и возвращает его канал и функцию отписки,
+// которую нужно вызвать при завершении стрима.
 func (h *Hub) Subscribe(userID int64) (<-chan *chatv1.ServerEvent, func()) {
 	sub := &subscriber{userID: userID, ch: make(chan *chatv1.ServerEvent, bufferSize)}
 
@@ -56,9 +53,8 @@ func (h *Hub) Subscribe(userID int64) (<-chan *chatv1.ServerEvent, func()) {
 	return sub.ch, unsub
 }
 
-// Publish доставляет событие всем подписчикам из списка recipients.
-// Неблокирующая отправка: если буфер подписчика полон, событие для него дропается,
-// чтобы один медленный клиент не тормозил остальных.
+// Publish неблокирующе доставляет событие подписчикам из recipients:
+// при полном буфере событие дропается, чтобы медленный клиент не тормозил остальных.
 func (h *Hub) Publish(recipients []int64, ev *chatv1.ServerEvent) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -67,7 +63,6 @@ func (h *Hub) Publish(recipients []int64, ev *chatv1.ServerEvent) {
 			select {
 			case sub.ch <- ev:
 			default:
-				// буфер полон — пропускаем, не блокируемся
 			}
 		}
 	}

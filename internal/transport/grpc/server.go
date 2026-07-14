@@ -12,20 +12,16 @@ import (
 	"github.com/Ippolid/messenger/internal/chat"
 )
 
-// Server реализует chatv1.ChatServiceServer.
-// Незавершённые методы наследуются от UnimplementedChatServiceServer
 type Server struct {
 	chatv1.UnimplementedChatServiceServer
 	authSvc *auth.Service
 	chatSvc *chat.Service
 }
 
-// NewServer собирает gRPC-сервер поверх доменных сервисов.
 func NewServer(authSvc *auth.Service, chatSvc *chat.Service) *Server {
 	return &Server{authSvc: authSvc, chatSvc: chatSvc}
 }
 
-// Register регистрирует нового пользователя.
 func (s *Server) Register(ctx context.Context, req *chatv1.RegisterRequest) (*chatv1.RegisterResponse, error) {
 	id, err := s.authSvc.Register(ctx, req.GetLogin(), req.GetPassword())
 	if err != nil {
@@ -34,7 +30,6 @@ func (s *Server) Register(ctx context.Context, req *chatv1.RegisterRequest) (*ch
 	return &chatv1.RegisterResponse{UserId: id}, nil
 }
 
-// Login проверяет пароль и выдаёт токены.
 func (s *Server) Login(ctx context.Context, req *chatv1.LoginRequest) (*chatv1.LoginResponse, error) {
 	access, refresh, err := s.authSvc.Login(ctx, req.GetLogin(), req.GetPassword())
 	if err != nil {
@@ -43,7 +38,6 @@ func (s *Server) Login(ctx context.Context, req *chatv1.LoginRequest) (*chatv1.L
 	return &chatv1.LoginResponse{AccessJwt: access, Refresh: refresh}, nil
 }
 
-// authError маппит доменные ошибки auth в gRPC-статусы.
 func authError(err error) error {
 	switch {
 	case errors.Is(err, auth.ErrLoginTaken):
