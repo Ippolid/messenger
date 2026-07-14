@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 
 	chatv1 "github.com/Ippolid/messenger/gen/chat/v1"
 	"github.com/Ippolid/messenger/internal/storage"
@@ -29,7 +28,11 @@ func (s *Service) SendMessage(ctx context.Context, senderID, chatID int64, body 
 		return 0, ErrPermissionDenied // reader — только чтение
 	}
 
-	msg, err := s.store.Chats.SaveMessage(ctx, chatID, senderID, body, marshalMessagePayload(chatID, senderID, body))
+	// Логин нужен уже в payload (fanout не ходит в БД) — резолвим до сохранения.
+	senderLogin, _ := s.store.Users.GetLoginByID(ctx, senderID)
+
+	payload := newMessagePayload(chatID, senderID, senderLogin, body, time.Now())
+	msg, err := s.store.Chats.SaveMessage(ctx, chatID, senderID, body, payload)
 	if err != nil {
 		return 0, fmt.Errorf("save message: %w", err)
 	}
@@ -37,12 +40,7 @@ func (s *Service) SendMessage(ctx context.Context, senderID, chatID int64, body 
 	_ = s.store.InsertAudit(ctx, senderID, "send_message", "message",
 		map[string]any{"chat_id": chatID, "message_id": msg.ID})
 
-	// Логин отправителя для отображения в realtime-событии.
-	if login, lerr := s.store.Users.GetLoginByID(ctx, senderID); lerr == nil {
-		msg.SenderLogin = login
-	}
-
-	s.fanoutNewMessage(ctx, msg)
+	// Больше не пушим в hub напрямую: событие едет через outbox → Redis → fanout.
 	return msg.ID, nil
 }
 
@@ -77,15 +75,10 @@ func (s *Service) MarkRead(ctx context.Context, userID, chatID, messageID int64)
 	_ = s.store.InsertAudit(ctx, userID, "mark_read", "chat",
 		map[string]any{"chat_id": chatID, "message_id": messageID})
 
-	ev := &chatv1.ServerEvent{
-		Type: chatv1.ServerEventType_SERVER_EVENT_TYPE_MESSAGE_READ,
-		Payload: &chatv1.ServerEvent_Read{Read: &chatv1.MessageReadEvent{
-			ChatId:            chatID,
-			UserId:            userID,
-			LastReadMessageId: messageID,
-		}},
+	// message.read едет тем же конвейером через outbox (message_id = NULL).
+	if payload, perr := readEventPayload(chatID, userID, messageID); perr == nil {
+		_ = s.store.Chats.InsertOutboxEvent(ctx, payload)
 	}
-	s.publishToChat(ctx, chatID, ev)
 	return nil
 }
 
@@ -108,21 +101,6 @@ func (s *Service) SendTyping(ctx context.Context, userID, chatID int64) error {
 	}
 	s.publishToChat(ctx, chatID, ev)
 	return nil
-}
-
-func (s *Service) fanoutNewMessage(ctx context.Context, msg storage.Message) {
-	ev := &chatv1.ServerEvent{
-		Type: chatv1.ServerEventType_SERVER_EVENT_TYPE_MESSAGE_NEW,
-		Payload: &chatv1.ServerEvent_Message{Message: &chatv1.Message{
-			Id:          msg.ID,
-			ChatId:      msg.ChatID,
-			SenderId:    msg.SenderID,
-			SenderLogin: msg.SenderLogin,
-			Body:        msg.Body,
-			CreatedAt:   timestamppb.New(msg.CreatedAt),
-		}},
-	}
-	s.publishToChat(ctx, msg.ChatID, ev)
 }
 
 func (s *Service) publishToChat(ctx context.Context, chatID int64, ev *chatv1.ServerEvent) {
